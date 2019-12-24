@@ -17,8 +17,27 @@
 void *accept_request(void*);
 int init_listen_sock(u_short *port);
 int getLine(int, char* , int);
-void send_httpok_header(int);
+void send_http_header(int, int, int);
 void clear_header(int);
+void send_static_file(int, char*, struct stat *);
+
+
+void send_static_file(int client, char *path, struct stat * st){
+    FILE *file = NULL;
+    file = fopen(path, "r");
+    if (file == NULL){
+        send_http_header(client, 404, 0);
+    }
+    else{
+        send_http_header(client, 200, st->st_size);
+        char buf[1024];
+        fgets(buf, sizeof(buf), file);
+        while(!feof(file)){
+            send(client, buf, strlen(buf), 0);
+            fgets(buf, sizeof(buf), file);
+        }
+    }
+}
 
 void clear_header(int client){
     char buf[128];
@@ -29,13 +48,27 @@ void clear_header(int client){
     }
 }
 
-void send_httpok_header(int client){
+void send_http_header(int client, int code, int cont_len){
     char buf[1024];
-    strcpy(buf, "HTTP/1.0 200 OK\r\n");
+    char msg[64];
+    if(code == 200){
+        sprintf(msg, "OK");
+    }else if(code == 404){
+        sprintf(msg, "NOT FOUND");
+    } else if(501 == code){
+        sprintf(msg, "Method Not Implemented");
+    }else if(500 == code){
+        sprintf(msg, "Internal Server Error");
+    }else if(400 == code){
+        sprintf(msg, "BAD REQUEST");
+    }
+    sprintf(buf, "HTTP/1.0 %d %s\r\n", code, msg);
     send(client, buf, strlen(buf), 0);
-    strcpy(buf, SERVER);
+    sprintf(buf, SERVER);
     send(client, buf, strlen(buf), 0);
-    strcpy(buf, "Content-Type: text/html;charset=UTF-8\r\n\r\n");
+    sprintf(buf, "Content-Type: text/html;charset=UTF-8\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "Content-Length: %d\r\n\r\n", cont_len);
     send(client, buf, strlen(buf), 0);
 }
 
@@ -72,6 +105,9 @@ void *accept_request(void* client_sock){
     int client = *(int *)client_sock;
     char buf[1024];
     char method[256];
+    char url[512];
+    char path[512];
+    struct stat st;
     size_t i = 0;
     size_t j = 0;
     getLine(client, buf, 1024);
@@ -80,14 +116,31 @@ void *accept_request(void* client_sock){
         i++;
         j++;
     }
-    clear_header(client);
     method[i] = '\0';
-    send_httpok_header(client);
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST")){
-        sprintf(method, "unable method");
+        send_http_header(client, 400, 0);
+        return NULL;
     }
-    send(client, method, strlen(method), 0);
-   
+    
+    i = 0;
+    while(isspace((int)buf[j]) && (j < sizeof(buf)))
+        j++;
+    while (!isspace((int)buf[j]) && (i < sizeof(url) - 1)){
+        url[i] = buf[j];
+        i++;
+        j++;
+    }
+    url[i] = '\0';
+    sprintf(path, "WWW%s", url);
+    clear_header(client);
+    if(path[strlen(path)-1] == '/')
+        strcat(path, "index.html");
+    if(stat(path, &st) == -1){
+        send_http_header(client, 404, 0);
+    }else{
+        send_static_file(client, path, &st);
+    }
+    clear_header(client);
     close(client);
     return NULL;
 }
