@@ -19,24 +19,26 @@ int init_listen_sock(u_short *port);
 int getLine(int, char* , int);
 void send_http_header(int, int, int);
 void clear_header(int);
-void send_static_file(int, char*, struct stat *);
+void send_static_file(int, char*, int);
 
 
-void send_static_file(int client, char *path, struct stat * st){
+void send_static_file(int client, char *path,  int code){
     FILE *file = NULL;
+    struct stat st;
+    if(stat(path, &st) == -1){
+        code = 404;
+        sprintf(path, "WWW/404.html");
+        stat(path, &st);
+    }
     file = fopen(path, "r");
-    if (file == NULL){
-        send_http_header(client, 404, 0);
-    }
-    else{
-        send_http_header(client, 200, st->st_size);
-        char buf[1024];
+    send_http_header(client, code, st.st_size);
+    char buf[1024];
+    fgets(buf, sizeof(buf), file);
+    while(!feof(file)){
+        send(client, buf, strlen(buf), 0);
         fgets(buf, sizeof(buf), file);
-        while(!feof(file)){
-            send(client, buf, strlen(buf), 0);
-            fgets(buf, sizeof(buf), file);
-        }
     }
+    
 }
 
 void clear_header(int client){
@@ -103,11 +105,11 @@ void error_die(const char* msg){
 
 void *accept_request(void* client_sock){
     int client = *(int *)client_sock;
+    int code = 200;
     char buf[1024];
     char method[256];
     char url[512];
     char path[512];
-    struct stat st;
     size_t i = 0;
     size_t j = 0;
     getLine(client, buf, 1024);
@@ -118,8 +120,7 @@ void *accept_request(void* client_sock){
     }
     method[i] = '\0';
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST")){
-        send_http_header(client, 400, 0);
-        return NULL;
+        code = 501;
     }
     
     i = 0;
@@ -131,15 +132,14 @@ void *accept_request(void* client_sock){
         j++;
     }
     url[i] = '\0';
+    if (code == 501){
+        sprintf(url, "/501.html");
+    }
     sprintf(path, "WWW%s", url);
     clear_header(client);
     if(path[strlen(path)-1] == '/')
         strcat(path, "index.html");
-    if(stat(path, &st) == -1){
-        send_http_header(client, 404, 0);
-    }else{
-        send_static_file(client, path, &st);
-    }
+    send_static_file(client, path,code);
     clear_header(client);
     close(client);
     return NULL;
