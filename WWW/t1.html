@@ -1,0 +1,26 @@
+<html lang="zh-CN">
+	<head>
+		<meta charset="utf-8">
+		<script src="https://code.jquery.com/jquery-latest.js"></script>
+	</head>
+	<body>
+		<div>
+			<input id="btn" type="submit" value="提交">
+		</div>
+		<script>
+			$("#btn").click(function(){
+				$.ajax({
+					type:"PUT",
+					url:"test",
+					dataType:'html',
+					success:function(data){
+						window.location.href="501.html";
+					},
+					error:function(data){
+						window.location.href="501.html";
+					}
+				});
+			});
+		</script>
+	</body>
+</html>

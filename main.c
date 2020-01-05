@@ -52,23 +52,23 @@ void execute_cgi(int client, const char *path, const char *method, const char *q
             numchars = getLine(client, buf, sizeof(buf));
         }
         //post却没有Content-Length字段, 发送500页面
-        if (content_length == -1) {
-            send_static_file(client, "500.html", 500);
+        if (content_length == -1 || content_length == 0) {
+            send_static_file(client, "WWW/500.html", 500);
             return;
         }
     }
 
     if (pipe(cgi_output) < 0) {
-        send_static_file(client, "500.html", 500);
+        send_static_file(client, "WWW/500.html", 500);
         return;
     }
     if (pipe(cgi_input) < 0) {
-        send_static_file(client, "500.html", 500);
+        send_static_file(client, "WWW/500.html", 500);
         return;
     }
 
     if ( (pid = fork()) < 0 ) {
-        send_static_file(client, "500.html", 500);
+        send_static_file(client, "WWW/500.html", 500);
          return;
     }
     sprintf(buf, "HTTP/1.0 200 OK\r\n");
@@ -228,7 +228,8 @@ void *accept_request(void* client_sock){
     method[i] = '\0';
     //如果是其它方法,发送501表示暂时支持其它方法
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST")){
-        code = 501;
+        send_static_file(client, "WWW/501.html",501);
+	return NULL;
     }
     //变量cgi表示是否需要执行cgi脚本, post方法是需要的
     if (strcasecmp(method, "POST") == 0)
