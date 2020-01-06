@@ -208,6 +208,8 @@ void error_die(const char* msg){
 
 void *accept_request(void* client_sock){
     int client = *(int *)client_sock;
+    free(client_sock);
+    pthread_detach(pthread_self());
     int code = 200;
     char buf[1024];
     char method[256];
@@ -226,10 +228,10 @@ void *accept_request(void* client_sock){
         j++;
     }
     method[i] = '\0';
-    //如果是其它方法,发送501表示暂时支持其它方法
+    //如果是其它方法,发送501表示暂时不支持其它方法
     if (strcasecmp(method, "GET") && strcasecmp(method, "POST")){
         send_static_file(client, "WWW/501.html",501);
-	return NULL;
+	    return NULL;
     }
     //变量cgi表示是否需要执行cgi脚本, post方法是需要的
     if (strcasecmp(method, "POST") == 0)
@@ -272,6 +274,7 @@ void *accept_request(void* client_sock){
         execute_cgi(client, path, method, query_string);
     }
     close(client);
+    
     return NULL;
 }
 
@@ -301,7 +304,7 @@ int main(int argc, char **argv){
     if(argc != 2)error_die("input a port");
     int listen_sock = -1;
     u_short port = (u_short)atoi(argv[1]);
-    int client_sock = -1;
+    int *client_sock = NULL;
     struct sockaddr_in client_addr;
     socklen_t  client_addr_len = sizeof(client_addr);
     pthread_t pt;
@@ -311,10 +314,11 @@ int main(int argc, char **argv){
     
     //不断监听, accept到一个连接就新建一个线程去执行accept_request
     while(1){
-        client_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &client_addr_len);
-        if (client_sock == -1)
+        client_sock = malloc(sizeof(int));
+        *client_sock = accept(listen_sock, (struct sockaddr *)&client_addr, &client_addr_len);
+        if ((*client_sock) == -1)
             error_die("error on accept");
-        if (pthread_create(&pt, NULL, accept_request, (void*)&client_sock) != 0)
+        if (pthread_create(&pt, NULL, accept_request, (void*)client_sock) != 0)
             perror("error on pthread_create");
     }
     close(listen_sock);
